@@ -1,14 +1,12 @@
 const Post = require('./posts-model');
-
 const express = require("express");
-const e = require('express');
 const router = express.Router()
 
 //[GET] /
 router.get('/', (req, res) => {
     Post.find()
         .then(posts => {
-            res.status(200).json(posts)
+            res.json(posts)
         })
         .catch(err => {
             res.status(500).json({message: "The posts information could not be retrieved"})
@@ -31,10 +29,14 @@ router.get('/:id', (req, res) => {
 })
 // posts /
 router.post('/', (req, res) => {
-    if(!req.body.title || !req.body.contents){
+    const {title, contents} = req.body
+    if(!title || !contents){
         res.status(400).json({message: "Please provide title and contents for the post"})
     } else {
-        Post.insert(req.body)
+        Post.insert({title, contents})
+            .then(({id}) => {
+                return Post.findById(id)
+            })
             .then(post => {
                 res.status(201).json(post)
             })
@@ -44,34 +46,45 @@ router.post('/', (req, res) => {
     }
 })
 //put /:id
-router.put('/:id', async (req, res) => {
-    const post = req.body
-    try{
-        if(!post.title || !post.contents){
-            res.status(400).json({message: "Please provide title and contents for the post"})
-        } else {
-            const updatedPost = await Post.update(req.params.id, post)
-            if(!updatedPost){
+router.put('/:id', (req, res) => {
+    const {title, contents} = req.body
+    if(!title || !contents){
+        res.status(400).json({message: "Please provide title and contents for the post"})
+    } else {
+        Post.findById(req.params.id)
+        .then(stuff => {
+            if(!stuff){
                 res.status(404).json({message: "The post with the specified ID does not exist"})
             } else {
-                res.status(200).json(updatedPost)
+                return Post.update(req.params.id, req.body)
             }
-        }
-    }
-    catch(err){
-        res.status(500).json({message: "The post information could not be modifie"})
-    }
+        })
+        .then(data => {
+            if(data){
+                return Post.findById(req.params.id, req.body)
+            }
+        })
+        .then(post => {
+            if(post){
+                res.json(post)
+            }
+        })
+        .catch(err =>{
+            res.status(500).json({message: "The post information could not be retrieved"})
+        })
+}
+
 })
 
 // delete /:id
 router.delete('/:id', async (req, res) => {
     try{
-        const {id} = req.params
-        const deletedUser = await Post.remove(id)
-        if(!deletedUser){
+        const post = await Post.findById(req.params.id)
+        if(!post){
             res.status(404).json({message: "The post with the specified ID does not exist"})
         } else {
-            res.status(200).json(deletedUser)
+            await Post.remove(req.params.id)
+            res.json(post)
         }
     }
     catch(err) {
@@ -80,18 +93,19 @@ router.delete('/:id', async (req, res) => {
 })
 
 // [GET] /:id/comments
-router.get('/:id/comments', (req, res) => {
-    Post.findPostComments(req.params.id)
-        .then(posts => {
-            if(!posts){
-                res.status(404).json({message: "The post with the specified ID does not exist"})
-            } else {
-                res.status(200).json(posts)
-            }
-        })
-        .catch(err => {
-            res.status(500).json({message: "The comments information could not be retrieved"})
-        })
+router.get('/:id/comments', async (req, res) => {
+    try{
+        const post = await Post.findById(req.params.id)
+        if(!post){
+            res.status(404).json({message: "The post with the specified ID does not exist"})
+        } else {
+            const messages = await Post.findPostComments(req.params.id)
+            res.json(messages)
+        }
+    }
+    catch(err){
+        res.status(500).json({message: "The comments information could not be retrieved"})
+    }
 })
 
 module.exports = router
